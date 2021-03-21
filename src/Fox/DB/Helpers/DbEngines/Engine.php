@@ -141,7 +141,7 @@ abstract class Engine implements DbEngine
                 continue;
             }
             [[$joinTableName, $joinAlias], $joinColumns, $nestedJoinTables] = $this->createSelectFromEntity($entityType, $index + 1, $entityName);
-            $joinTables = array_merge([[$joinTableName, $joinAlias, $joinColumn, $nullable, $columns[$entityName][$primaryKey]]], $nestedJoinTables);
+            $joinTables = array_merge([[$joinTableName, $joinAlias, $joinColumn, $nullable, $columns[$entityName][$primaryKey], $entityType]], $nestedJoinTables);
             $columns = array_merge($columns, $joinColumns);
         }
 

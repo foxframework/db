@@ -28,6 +28,9 @@ namespace Fox\DB\Helpers\DbEngines;
 
 use Fox\DB\Helpers\Predicate;
 use Fox\DB\Sources\Services\FoxDbConnection;
+use PDO;
+use PDOStatement;
+use function Webmozart\Assert\Tests\StaticAnalysis\true;
 
 class MySQLDbEngine extends Engine implements DbEngine
 {
@@ -41,8 +44,13 @@ class MySQLDbEngine extends Engine implements DbEngine
         [[$tableName, $alias], $columns, $joinTables, $eagerJoinManyToOne] = $this->createSelectFromEntity($entityName);
         $selectClause = $this->generateSelectClause($columns);
         $fromClause = $this->generateFromClause($tableName, $alias);
-        $joinClause = $this->generateJoinClauses($joinTables);
-
+        $joinClause = $this->generateJoinClauses($joinTables, $foxDbConnection);
+        [$whereClause, $bindings] = $this->generateWhereClause($columns, $predicates);
+        $join = implode(' ', $joinClause);
+        $query = "$selectClause $fromClause $join $whereClause";
+        $stmt = $this->getPdoStatement($query, $bindings, $foxDbConnection);
+        $stmt->execute();
+        $res = $stmt->fetchAll();
 
         return [];
     }
@@ -70,8 +78,13 @@ class MySQLDbEngine extends Engine implements DbEngine
     private function generateSelectClause(array $columns): string
     {
         $select = 'SELECT ';
+        $firstRun = true;
         foreach ($columns as $entityColumns) {
+            if (!$firstRun) {
+                $select .= ', ';
+            }
             $select .= join(',', $entityColumns);
+            $firstRun = false;
         }
 
         return $select;
@@ -82,12 +95,12 @@ class MySQLDbEngine extends Engine implements DbEngine
         return "FROM `$tableName` AS `$alias`";
     }
 
-    private function generateJoinClauses(array $joinTables): array
+    private function generateJoinClauses(array $joinTables, FoxDbConnection $foxDbConnection): array
     {
         $ret = [];
         foreach ($joinTables as $joinTable) {
             $join = '';
-            [$tableName, $alias, $joinOn, $nullable, $parentColumn] = $joinTable;
+            [$tableName, $alias, $joinOn, $nullable, $parentColumn, $entityType] = $joinTable;
             if ($nullable) {
                 $join = 'LEFT ';
             }
@@ -96,6 +109,64 @@ class MySQLDbEngine extends Engine implements DbEngine
         }
 
         return $ret;
+    }
+
+    private function generateWhereClause(array $columns, array $predicates): array
+    {
+        $clause = 'WHERE ';
+        $bindings = [];
+        $pIndex = 0;
+        $predCount = count($predicates) - 1;
+        $i = 0;
+        $andNeeded = false;
+
+        foreach ($predicates as $orPredicate) {
+            foreach ($orPredicate->getPredicates() as $andPredicate) {
+                [$className, $variable, $operation, $value] = $andPredicate;
+
+                if ($andNeeded) {
+                    $clause .= ' AND ';
+                }
+
+                $andNeeded = true;
+
+                if (in_array($operation, [Predicate::IN, Predicate::NOT_IN])) {
+                    $bindPar = '(';
+                    $firstRun = true;
+                    foreach ($value as $item) {
+                        $bindings[":p$pIndex"] = [$item, is_string($value) ? PDO::PARAM_STR : PDO::PARAM_INT];
+                        if (!$firstRun) {
+                            $bindPar .= ',';
+                        }
+                        $bindPar .= ":p$pIndex";
+                        $pIndex++;
+                        $firstRun = false;
+                    }
+                    $bindPar .= ')';
+                } else {
+                    $bindPar = ":p$pIndex";
+                    $bindings[$bindPar] = [$value, is_string($value) ? PDO::PARAM_STR : PDO::PARAM_INT];
+                    $pIndex++;
+                }
+                $clause .= $columns[$className][$variable] . " $operation $bindPar";
+            }
+
+            if ($predCount < $i) {
+                $clause .= ' OR ';
+                $andNeeded = false;
+            }
+            $i++;
+        }
+        return [$clause, $bindings];
+    }
+
+    private function getPdoStatement(string $query, array $bindings, FoxDbConnection $connection): PDOStatement
+    {
+        $stmt = $connection->getPdoConnection()->prepare($query);
+        foreach ($bindings as $parameter => [$value, $type]) {
+            $stmt->bindParam($parameter, $value, $type);
+        }
+        return $stmt;
     }
 
 }
