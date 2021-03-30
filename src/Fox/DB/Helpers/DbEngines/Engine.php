@@ -33,6 +33,7 @@ use Fox\DB\Attribute\OneToMany;
 use Fox\DB\Attribute\OneToOne;
 use Fox\DB\Attribute\PrimaryKey;
 use Fox\DB\Attribute\Table;
+use Fox\DB\Helpers\FoxEntity;
 use Fox\DB\Helpers\IncorrectMappingException;
 use Fox\DB\Helpers\StringUtils;
 use JetBrains\PhpStorm\ArrayShape;
@@ -151,7 +152,21 @@ abstract class Engine implements DbEngine
     protected function getColumnsWithAliases(string $alias, array $columns)
     {
         return array_map(function ($v) use ($alias) {
-            return "`$alias`.`$v`";
+            return "`$alias`.`$v` as `$alias$v`";
         }, $columns);
+    }
+
+    protected function getRealAliases(array $columns)
+    {
+        return array_map(function ($v) {
+            return explode('as ', $v)[1];
+        }, $columns);
+    }
+
+    public static function hydratePdoResultToEntity(string $className, array $pdoResult, array $columnMapping): FoxEntity
+    {
+        $mappedArray =[];
+
+
     }
 }

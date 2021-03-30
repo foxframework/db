@@ -97,7 +97,7 @@ class MySQLDbEngineTest extends TestCase
         $engine->select($this->foxDbConnection, TestingEntity::class, 1, 0, $predicate1, $predicate2);
         $this->assertEquals(1, count($this->testingPDO->queries));
         $this->assertEquals(
-            'SELECT `t0`.`id`,`t0`.`first_column`,`t0`.`custom_second_column`, `t1`.`id`,`t1`.`some_column`, `t2`.`id`,`t2`.`some_column` FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) LEFT JOIN `testing_joined_second` AS `t2` ON (`t2`.`testing_joined_entity_id` = `t1`.`id`) WHERE `t0`.`first_column` = :p0 AND `t1`.`some_column` NOT IN (:p1,:p2) AND `t2`.`some_column` = :p3', $this->testingPDO->queries[0][0]);
+            'SELECT `t0`.`id` as `t0id`,`t0`.`first_column` as `t0first_column`,`t0`.`custom_second_column` as `t0custom_second_column`, `t1`.`id` as `t1id`,`t1`.`some_column` as `t1some_column`, `t2`.`id` as `t2id`,`t2`.`some_column` as `t2some_column` FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) LEFT JOIN `testing_joined_second` AS `t2` ON (`t2`.`testing_joined_entity_id` = `t1`.`id`) WHERE (`t0`.`first_column` = :p0 AND `t1`.`some_column` NOT IN (:p1,:p2)) OR (`t2`.`some_column` = :p3)', $this->testingPDO->queries[0][0]);
     }
 
 }

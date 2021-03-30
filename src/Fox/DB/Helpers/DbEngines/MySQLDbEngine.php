@@ -43,36 +43,21 @@ class MySQLDbEngine extends Engine implements DbEngine
     {
         [[$tableName, $alias], $columns, $joinTables, $eagerJoinManyToOne] = $this->createSelectFromEntity($entityName);
         $selectClause = $this->generateSelectClause($columns);
-        $fromClause = $this->generateFromClause($tableName, $alias);
-        $joinClause = $this->generateJoinClauses($joinTables, $foxDbConnection);
-        [$whereClause, $bindings] = $this->generateWhereClause($columns, $predicates);
-        $join = implode(' ', $joinClause);
-        $query = "$selectClause $fromClause $join $whereClause";
-        $stmt = $this->getPdoStatement($query, $bindings, $foxDbConnection);
-        $stmt->execute();
+        $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause);
         $res = $stmt->fetchAll();
+        foreach ($columns as $entity => &$aliases){
+            $aliases = $this->getRealAliases($aliases);
+        }
 
         return [];
     }
 
     public function count(FoxDbConnection $foxDbConnection, string $entityName, Predicate ...$predicates): int
     {
-        // TODO: Implement generateCountQuery() method.
-    }
-
-    public function insert(FoxDbConnection $foxDbConnection, string $entityName, Predicate ...$predicates): array
-    {
-        // TODO: Implement generateInsertQuery() method.
-    }
-
-    public function update(FoxDbConnection $foxDbConnection, string $entityName, Predicate ...$predicates): array
-    {
-        // TODO: Implement generateUpdateQuery() method.
-    }
-
-    public function delete(FoxDbConnection $foxDbConnection, string $entityName, Predicate ...$predicates): array
-    {
-        // TODO: Implement generateDeleteQuery() method.
+        [[$tableName, $alias], $columns, $joinTables, $eagerJoinManyToOne] = $this->createSelectFromEntity($entityName);
+        $selectClause = 'SELECT COUNT(*)';
+        $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause);
+        return $stmt->fetch(PDO::FETCH_COLUMN);
     }
 
     private function generateSelectClause(array $columns): string
@@ -104,6 +89,7 @@ class MySQLDbEngine extends Engine implements DbEngine
             if ($nullable) {
                 $join = 'LEFT ';
             }
+            $parentColumn = explode(' as', $parentColumn)[0];
             $join .= "JOIN `$tableName` AS `$alias` ON (`$alias`.`$joinOn` = $parentColumn)";
             $ret[] = $join;
         }
@@ -121,6 +107,7 @@ class MySQLDbEngine extends Engine implements DbEngine
         $andNeeded = false;
 
         foreach ($predicates as $orPredicate) {
+            $clause .= '(';
             foreach ($orPredicate->getPredicates() as $andPredicate) {
                 [$className, $variable, $operation, $value] = $andPredicate;
 
@@ -148,10 +135,12 @@ class MySQLDbEngine extends Engine implements DbEngine
                     $bindings[$bindPar] = [$value, is_string($value) ? PDO::PARAM_STR : PDO::PARAM_INT];
                     $pIndex++;
                 }
-                $clause .= $columns[$className][$variable] . " $operation $bindPar";
+                $clause .= explode(' as', $columns[$className][$variable])[0] . " $operation $bindPar";
             }
 
-            if ($predCount < $i) {
+            $clause .= ')';
+
+            if ($predCount !== $i) {
                 $clause .= ' OR ';
                 $andNeeded = false;
             }
@@ -166,6 +155,24 @@ class MySQLDbEngine extends Engine implements DbEngine
         foreach ($bindings as $parameter => [$value, $type]) {
             $stmt->bindParam($parameter, $value, $type);
         }
+        return $stmt;
+    }
+
+    public function doSelect($tableName,
+                             $alias,
+                             mixed $joinTables,
+                             FoxDbConnection $foxDbConnection,
+                             mixed $columns,
+                             array $predicates,
+                             string $selectClause): PDOStatement
+    {
+        $fromClause = $this->generateFromClause($tableName, $alias);
+        $joinClause = $this->generateJoinClauses($joinTables, $foxDbConnection);
+        [$whereClause, $bindings] = $this->generateWhereClause($columns, $predicates);
+        $join = implode(' ', $joinClause);
+        $query = "$selectClause $fromClause $join $whereClause";
+        $stmt = $this->getPdoStatement($query, $bindings, $foxDbConnection);
+        $stmt->execute();
         return $stmt;
     }
 

@@ -35,11 +35,5 @@ interface DbEngine
 
     function count(FoxDbConnection $foxDbConnection, string $entityName, Predicate...$predicates): int;
 
-    function insert(FoxDbConnection $foxDbConnection, string $entityName, Predicate...$predicates): array;
-
-    function update(FoxDbConnection $foxDbConnection, string $entityName, Predicate...$predicates): array;
-
-    function delete(FoxDbConnection $foxDbConnection, string $entityName, Predicate...$predicates): array;
-
     function handles(): string;
 }
