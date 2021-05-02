@@ -40,16 +40,16 @@ class TestingEntity extends FoxEntity
     #[Column]
     #[PrimaryKey]
     #[AutoIncrement]
-    private int $id;
+    protected int $id;
 
     #[Column]
-    private string $firstColumn;
+    protected string $firstColumn;
 
     #[Column('custom_second_column')]
-    private string $secondColumn;
+    protected string $secondColumn;
 
     #[OneToOne('testing_entity_id')]
-    private TestingJoinedEntity $testingJoinedOneToOne;
+    protected TestingJoinedEntity $testingJoinedOneToOne;
 
 
     public function getId(): int
@@ -59,6 +59,7 @@ class TestingEntity extends FoxEntity
 
     public function setId(int $id): void
     {
+        $this->changeValue('id', $id);
         $this->id = $id;
     }
 
@@ -69,6 +70,7 @@ class TestingEntity extends FoxEntity
 
     public function setFirstColumn(string $firstColumn): void
     {
+        $this->changeValue('firstColumn', $firstColumn);
         $this->firstColumn = $firstColumn;
     }
 
@@ -79,6 +81,7 @@ class TestingEntity extends FoxEntity
 
     public function setSecondColumn(string $secondColumn): void
     {
+        $this->changeValue('secondColumn', $secondColumn);
         $this->secondColumn = $secondColumn;
     }
 
@@ -89,6 +92,7 @@ class TestingEntity extends FoxEntity
 
     public function setTestingJoinedOneToOne(TestingJoinedEntity $testingJoinedOneToOne): void
     {
+        $this->changeValue('testingJoinedOneToOne', $testingJoinedOneToOne);
         $this->testingJoinedOneToOne = $testingJoinedOneToOne;
     }
 }

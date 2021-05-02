@@ -32,19 +32,22 @@ abstract class FoxEntity
     private array $_lazyInitFields = [];
     private array $_queryConditions = [];
     private bool $_virginEntity = true;
+    private bool $_useDiff = false;
 
-    public function __get(string $name)
+    public function getLazy(string $name, mixed $value)
     {
         //TODO: Load lazy field
         if (in_array($name, $this->_lazyInitFields)) {
 
         }
-        return $this->{$name};
+        return $value;
     }
 
-    public function __set(string $name, mixed $value): void
+    public function changeValue(mixed $name, mixed $value): void
     {
-        if ($value === $this->{$name}) {
+        $this->_useDiff = true;
+
+        if (!isset($this->{$name}) || $value === $this->{$name}) {
             return;
         }
 
@@ -55,8 +58,6 @@ abstract class FoxEntity
         if (in_array($name, $this->_lazyInitFields) && !empty($value)) {
             $this->_lazyInitFields = array_diff($this->_lazyInitFields, [$name]);
         }
-
-        $this->{$name} = $value;
     }
 
     public function setQueryConditions(array $queryConditions): void
@@ -66,6 +67,7 @@ abstract class FoxEntity
 
     public function setAsNotVirgin(): void
     {
+        $this->_changedFields = [];
         $this->_virginEntity = false;
     }
 

@@ -26,14 +26,10 @@
 
 namespace Fox\DB\Helpers\DbEngines;
 
-use Fox\DB\Helpers\Predicate;
-use Fox\DB\Sources\Services\FoxDbConnection;
-
-interface DbEngine
+class SQLiteDbEngine extends Engine implements DbEngine
 {
-    function select(FoxDbConnection $foxDbConnection, string $entityName, ?int $limit, ?int $offset, ?string $limitedJoin, array $predicates): ?array;
-
-    function count(FoxDbConnection $foxDbConnection, string $entityName, array $predicates): int;
-
-    function handles(): string;
+    public function handles(): string
+    {
+        return 'sqlite';
+    }
 }

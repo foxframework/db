@@ -58,13 +58,13 @@ class Predicate
         return $this->predicates;
     }
 
-    public function add(string $className, string $variable, mixed $value, string $operation = self::EQUALS): Predicate
+    public function add(string $className, string $variable, mixed $value, string $operation = self::EQUALS, bool $exactPredicate = false): Predicate
     {
         if (!in_array($operation, self::ALLOWED_OPERATIONS)) {
             throw new NotAllowedPredicateException("Operation '$operation' is not supported!");
         }
 
-        $this->predicates[] = [$className, $variable, $operation, $value];
+        $this->predicates[] = [$className, $variable, $operation, $value, $exactPredicate];
         return $this;
     }
 }

@@ -29,6 +29,7 @@ namespace Fox\DB\Sources\Services\Stubs;
 
 use Fox\DB\Attribute\AutoIncrement;
 use Fox\DB\Attribute\Column;
+use Fox\DB\Attribute\OneToMany;
 use Fox\DB\Attribute\OneToOne;
 use Fox\DB\Attribute\PrimaryKey;
 use Fox\DB\Attribute\Table;
@@ -47,8 +48,8 @@ class TestingJoinedEntity extends FoxEntity
     #[Column('testing_entity_id')]
     public TestingEntity $testingEntity;
 
-    #[OneToOne('testing_joined_entity_id')]
-    public ?TestingSecondJoinedEntity $testingSecondJoinedEntity;
+    #[OneToMany(TestingSecondJoinedEntity::class, 'testing_joined_entity_id')]
+    public ?array $testingSecondJoinedEntities;
 
     #[Column]
     public ?string $someColumn;
