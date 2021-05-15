@@ -26,6 +26,14 @@
 
 namespace Fox\DB\Helpers;
 
+use Fox\Core\Helpers\Globals;
+use Fox\DB\Attribute\Column;
+use Fox\DB\Attribute\Lazy;
+use Fox\DB\Helpers\DbEngines\Engine;
+use Fox\DB\Sources\Services\FoxDbConnection;
+use Psr\Container\ContainerInterface;
+use ReflectionClass;
+
 abstract class FoxEntity
 {
     private array $_changedFields = [];
@@ -34,13 +42,69 @@ abstract class FoxEntity
     private bool $_virginEntity = true;
     private bool $_useDiff = false;
 
-    public function getLazy(string $name, mixed $value)
+    public function __construct()
     {
-        //TODO: Load lazy field
-        if (in_array($name, $this->_lazyInitFields)) {
-
+        foreach ((new ReflectionClass($this))->getProperties() as $property) {
+            $lazy = $property->getAttributes(Lazy::class);
+            if (!empty($lazy)) {
+                $this->_lazyInitFields[] = $property->getName();
+            }
         }
-        return $value;
+
+    }
+
+    public function getLazy(string $name)
+    {
+        if (in_array($name, $this->_lazyInitFields)) {
+            /** @var ContainerInterface $container */
+            $container = Globals::get('foxContainer');
+            /** @var FoxDbConnection $dbConnection */
+            $dbConnection = $container->get(FoxDbConnection::class);
+            $dbEngine = $dbConnection->getDbEngine();
+            $reflection = new ReflectionClass($this);
+            $primaryKey = Engine::getPrimaryKey($reflection);
+            $property = $reflection->getProperty($name);
+            $targetReflection = new ReflectionClass($property->getType()->getName());
+            $targetProperty = null;
+            foreach ($targetReflection->getProperties() as $targetLoopProperty) {
+                if($targetLoopProperty->getType()->getName() === $this::class) {
+                    $targetProperty = $targetLoopProperty;
+                    break;
+                }
+            }
+
+            if (empty($targetProperty)){
+                throw new IncorrectMappingException('Target entity not found');
+            }
+
+            $joinColumnName = $targetProperty->getAttributes(Column::class)[0]->newInstance()->name;
+
+            $predicate = (new Predicate())->add($this::class, $joinColumnName, $this->{$primaryKey},  exactPredicate: true);
+            $type = $reflection->getProperty($name)->getType()->getName();
+            $isArray = $type === 'array';
+            $limit = $isArray ? null : 1;
+            $offset = $isArray ? null : 0;
+            $result = $dbEngine->select($dbConnection, $type, $limit, $offset, $this::class, [$predicate]);
+            $parentPropertyName = null;
+            foreach ($result as $res) {
+                $resultReflection = new ReflectionClass($res);
+                if (empty($parentPropertyName)) {
+                    foreach ($resultReflection->getProperties() as $property) {
+                        if ($property->getType()->getName() === $this::class) {
+                            $parentPropertyName = $property->getName();
+                            break;
+                        }
+                    }
+                }
+                $resultReflection->getProperty($parentPropertyName)->setAccessible(true);
+                $resultReflection->getProperty($parentPropertyName)->setValue($res, $this);
+            }
+            $value = $isArray ? $result : ($result[0] ?? null);
+            $this->{$name} = $value;
+            $this->changeValue($name, $value);
+            return $value;
+        }
+        return $this->{$name};
     }
 
     public function changeValue(mixed $name, mixed $value): void
@@ -51,7 +115,7 @@ abstract class FoxEntity
             return;
         }
 
-        if (!str_starts_with($name, '_')) {
+        if (!str_starts_with($name, '_') && !in_array($name, $this->_lazyInitFields)) {
             $this->_changedFields[] = $value;
         }
 

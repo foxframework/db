@@ -26,12 +26,16 @@
 
 namespace Fox\DB\Helpers\DbEngines;
 
+use Fox\Core\DI\FoxContainer;
+use Fox\Core\Helpers\Globals;
 use Fox\DB\Helpers\IncorrectMappingException;
 use Fox\DB\Helpers\Predicate;
 use Fox\DB\Sources\Services\FoxDbConnection;
+use Fox\DB\Sources\Services\Stubs\FakeContainer;
 use Fox\DB\Sources\Services\Stubs\SomeEntity;
 use Fox\DB\Sources\Services\Stubs\TestingEntity;
 use Fox\DB\Sources\Services\Stubs\TestingJoinedEntity;
+use Fox\DB\Sources\Services\Stubs\TestingLazyJoinedEntity;
 use Fox\DB\Sources\Services\Stubs\TestingPDO;
 use Fox\DB\Sources\Services\Stubs\TestingSecondJoinedEntity;
 use PHPUnit\Framework\TestCase;
@@ -40,9 +44,11 @@ require 'Stubs/SomeEntity.php';
 require 'Stubs/TestingEntity.php';
 require 'Stubs/TestingJoinedEntity.php';
 require 'Stubs/TestingSecondJoinedEntity.php';
+require 'Stubs/TestingLazyJoinedEntity.php';
 require 'Stubs/TestingPDO.php';
+require 'Stubs/FakeContainer.php';
 
-class MySQLDbEngineTest extends TestCase
+class DbEngineTest extends TestCase
 {
     private FoxDbConnection $foxDbConnection;
     private TestingPDO $testingPDO;
@@ -75,10 +81,19 @@ class MySQLDbEngineTest extends TestCase
                 FOREIGN KEY(testing_joined_entity_id) REFERENCES testing_joined(id)
                 )
         ');
+        $this->testingPDO->query('
+            CREATE TABLE `testing_lazy_joined` (
+                id INTEGER  PRIMARY KEY AUTOINCREMENT,
+                some_lazy_column TEXT,
+                testing_entity_id INTEGER,
+                FOREIGN KEY(testing_entity_id) REFERENCES testing(id)
+                )
+        ');
 
         $this->testingPDO->query("INSERT INTO `testing` VALUES (1, 'test', 'custom data')");
         $this->testingPDO->query("INSERT INTO `testing_joined` VALUES (1, '3ghi', 1)");
         $this->testingPDO->query("INSERT INTO `testing_joined_second` VALUES (1, 'test1234', 1)");
+        $this->testingPDO->query("INSERT INTO `testing_lazy_joined` VALUES (1, 'some lazy text', 1)");
 
         $this->foxDbConnection->method("getPdoConnection")->willReturn($this->testingPDO);
     }
@@ -120,6 +135,17 @@ LIMIT 1 OFFSET 0'), $this->testingPDO->queries[0][0]);
 SELECT `t0`.`id` as `t0id`,`t0`.`some_column` as `t0some_column` 
 FROM `testing_joined_second` AS `t0`  
 WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]);
+
+        $container = new FakeContainer();
+        $this->foxDbConnection->method("getDbEngine")->willReturn($engine);
+
+        $container->set(FoxDbConnection::class, $this->foxDbConnection);
+        Globals::set('foxContainer', $container);
+        $lazy = $result[0]->getTestingLazyJoinedEntity();
+        $this->assertTrue($lazy instanceof TestingLazyJoinedEntity);
+        $this->assertEquals('some lazy text', $lazy->someLazyColumn);
+        $this->assertCount(3, $this->testingPDO->queries);
+        $this->assertEquals('SELECT `t0`.`id` as `t0id`,`t0`.`some_lazy_column` as `t0some_lazy_column` FROM `testing_lazy_joined` AS `t0`  WHERE (`t0`.`testing_entity_id` = ?) LIMIT 1 OFFSET 0', $this->testingPDO->queries[2][0]);
     }
 
 }

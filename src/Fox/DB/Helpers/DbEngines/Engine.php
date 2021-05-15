@@ -167,7 +167,7 @@ abstract class Engine implements DbEngine
         [$tableName, $reflectionClass] = $this->createReflection($entityName);
         $alias = substr($tableName, 0, 1) . $index;
         $columns[$entityName] = $this->getColumnsWithAliases($alias, $this->getColumns($reflectionClass));
-        $primaryKey = $this->getPrimaryKey($reflectionClass);
+        $primaryKey = self::getPrimaryKey($reflectionClass);
         $eagerJoins = $this->getEagerJoins($reflectionClass, $primaryKey);
         $joinTables = [];
         $parent = [];
@@ -179,10 +179,11 @@ abstract class Engine implements DbEngine
                 continue;
             }
             [[$joinTableName, $joinAlias], $joinColumns, $nestedJoinTables, $nestedEagerJoinsManyToOne, $nestedParent] = $this->createSelectFromEntity($entityType, $index + 1, $entityName);
-            $joinTables = array_merge([[$joinTableName, $joinAlias, $joinColumn, $nullable, $columns[$entityName][$primaryKey], $entityType]], $nestedJoinTables);
+            $joinTables = array_merge([[$joinTableName, $joinAlias, $joinColumn, $nullable, $columns[$entityName][$primaryKey], $entityType]], $nestedJoinTables, $joinTables);
             $columns = array_merge($columns, $joinColumns);
             $eagerJoins[Engine::ONE_TO_MANY] = array_merge($eagerJoins[Engine::ONE_TO_MANY], $nestedEagerJoinsManyToOne);
             $parent = array_merge($parent, $nestedParent);
+            $index++;
         }
 
         return [[$tableName, $alias], $columns, $joinTables, $eagerJoins[Engine::ONE_TO_MANY], $parent];
@@ -268,7 +269,7 @@ abstract class Engine implements DbEngine
         return $res;
     }
 
-    protected function getPrimaryKey(ReflectionClass $reflectionClass): string
+    public static function getPrimaryKey(ReflectionClass $reflectionClass): string
     {
         foreach ($reflectionClass->getProperties() as $property) {
             $columnAttributes = $property->getAttributes(PrimaryKey::class);

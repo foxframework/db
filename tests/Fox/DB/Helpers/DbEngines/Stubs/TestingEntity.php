@@ -29,6 +29,7 @@ namespace Fox\DB\Sources\Services\Stubs;
 
 use Fox\DB\Attribute\AutoIncrement;
 use Fox\DB\Attribute\Column;
+use Fox\DB\Attribute\Lazy;
 use Fox\DB\Attribute\OneToOne;
 use Fox\DB\Attribute\PrimaryKey;
 use Fox\DB\Attribute\Table;
@@ -50,6 +51,10 @@ class TestingEntity extends FoxEntity
 
     #[OneToOne('testing_entity_id')]
     protected TestingJoinedEntity $testingJoinedOneToOne;
+
+    #[OneToOne('testing_entity_id')]
+    #[Lazy]
+    protected TestingLazyJoinedEntity $testingLazyJoinedEntity;
 
 
     public function getId(): int
@@ -95,4 +100,14 @@ class TestingEntity extends FoxEntity
         $this->changeValue('testingJoinedOneToOne', $testingJoinedOneToOne);
         $this->testingJoinedOneToOne = $testingJoinedOneToOne;
     }
+
+    public function getTestingLazyJoinedEntity(): TestingLazyJoinedEntity
+    {
+        return $this->getLazy('testingLazyJoinedEntity');
+    }
+
+    public function setTestingLazyJoinedEntity(TestingLazyJoinedEntity $testingLazyJoinedEntity): void
+    {
+        $this->changeValue('testingLazyJoinedEntity', $testingLazyJoinedEntity);
+        $this->testingLazyJoinedEntity = $testingLazyJoinedEntity;    }
 }

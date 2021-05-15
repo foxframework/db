@@ -27,27 +27,23 @@
 namespace Fox\DB\Sources\Services\Stubs;
 
 
-use Fox\DB\Attribute\AutoIncrement;
-use Fox\DB\Attribute\Column;
-use Fox\DB\Attribute\OneToOne;
-use Fox\DB\Attribute\PrimaryKey;
-use Fox\DB\Attribute\Table;
-use Fox\DB\Helpers\FoxEntity;
+use Psr\Container\ContainerInterface;
 
-#[Table('testing_lazy_joined')]
-class TestingLazyJoinedEntity extends FoxEntity
+class FakeContainer implements ContainerInterface
 {
+    private array $services = [];
 
-    #[Column]
-    #[PrimaryKey]
-    #[AutoIncrement]
-    public int $id;
+    public function get($id)
+    {
+        return $this->services[$id];
+    }
 
-    #[OneToOne('id')]
-    #[Column('testing_entity_id')]
-    public TestingEntity $testingEntity;
+    public function has($id)
+    {
+    }
 
-    #[Column]
-    public ?string $someLazyColumn;
-
+    public function set(string $id, mixed $value)
+    {
+        $this->services[$id] = $value;
+    }
 }
