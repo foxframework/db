@@ -91,7 +91,9 @@ class DbEngineTest extends TestCase
         ');
 
         $this->testingPDO->query("INSERT INTO `testing` VALUES (1, 'test', 'custom data')");
+        $this->testingPDO->query("INSERT INTO `testing` VALUES (2, 'test1', 'custom data')");
         $this->testingPDO->query("INSERT INTO `testing_joined` VALUES (1, '3ghi', 1)");
+        $this->testingPDO->query("INSERT INTO `testing_joined` VALUES (2, '2def', 2)");
         $this->testingPDO->query("INSERT INTO `testing_joined_second` VALUES (1, 'test1234', 1)");
         $this->testingPDO->query("INSERT INTO `testing_lazy_joined` VALUES (1, 'some lazy text', 1)");
 
@@ -103,7 +105,7 @@ class DbEngineTest extends TestCase
     {
         $engine = new SQLiteDbEngine();
         $this->expectException(IncorrectMappingException::class);
-        $engine->select($this->foxDbConnection, SomeEntity::class, 1, 0);
+        $engine->select($this->foxDbConnection, SomeEntity::class, 1, 0, null, []);
     }
 
     public function testCreateSelectQuery(): void
@@ -146,6 +148,18 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $this->assertEquals('some lazy text', $lazy->someLazyColumn);
         $this->assertCount(3, $this->testingPDO->queries);
         $this->assertEquals('SELECT `t0`.`id` as `t0id`,`t0`.`some_lazy_column` as `t0some_lazy_column` FROM `testing_lazy_joined` AS `t0`  WHERE (`t0`.`testing_entity_id` = ?) LIMIT 1 OFFSET 0', $this->testingPDO->queries[2][0]);
+    }
+
+    public function testCount()
+    {
+        $this->testingPDO->queries = [];
+        $engine = new MySQLDbEngine();
+        $predicate = (new Predicate())
+            ->add(TestingEntity::class, 'firstColumn', 'test1');
+        $result = $engine->count($this->foxDbConnection, TestingEntity::class, [$predicate]);
+        $this->assertEquals(1, $result);
+        $this->assertCount(1, $this->testingPDO->queries);
+        $this->assertEquals('SELECT COUNT(*) FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) WHERE (`t0`.`first_column` = ?)', trim($this->testingPDO->queries[0][0]));
     }
 
 }

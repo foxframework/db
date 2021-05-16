@@ -40,6 +40,7 @@ use Fox\DB\Helpers\Predicate;
 use Fox\DB\Helpers\StringUtils;
 use Fox\DB\Sources\Services\FoxDbConnection;
 use JetBrains\PhpStorm\ArrayShape;
+use PDO;
 use PDOStatement;
 use ReflectionClass;
 
@@ -455,7 +456,7 @@ abstract class Engine implements DbEngine
     {
         [[$tableName, $alias], $columns, $joinTables, $eagerJoinManyToOne] = $this->createSelectFromEntity($entityName);
         $selectClause = 'SELECT COUNT(*)';
-        $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause, 1, 0);
+        $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause, null, null);
         return $stmt->fetch(PDO::FETCH_COLUMN);
     }
 }
