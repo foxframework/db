@@ -162,4 +162,40 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $this->assertEquals('SELECT COUNT(*) FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) WHERE (`t0`.`first_column` = ?)', trim($this->testingPDO->queries[0][0]));
     }
 
+    public function testInsert()
+    {
+        $this->testingPDO->queries = [];
+        $engine = new MySQLDbEngine();
+        $container = new FakeContainer();
+        $this->foxDbConnection->method("getDbEngine")->willReturn($engine);
+
+        $container->set(FoxDbConnection::class, $this->foxDbConnection);
+        Globals::set('foxContainer', $container);
+
+        $test = new TestingEntity();
+        $test->setFirstColumn('my set first column');
+        $test->setSecondColumn('my second column');
+
+        $testJoined = new TestingJoinedEntity();
+        $testJoined->someColumn = 'Some joned column';
+
+        $testSecondJoined = new TestingSecondJoinedEntity();
+        $testSecondJoined->someColumn = 'Some first second joined';
+        $testSecondJoined->testingJoinedEntity = $testJoined;
+
+        $testSecondJoined2 = new TestingSecondJoinedEntity();
+        $testSecondJoined2->someColumn = 'Some second second joined';
+        $testSecondJoined2->testingJoinedEntity = $testJoined;
+
+        $testJoined->testingSecondJoinedEntities = [$testSecondJoined, $testSecondJoined2];
+        $test->setTestingJoinedOneToOne($testJoined);
+
+        $engine->insert($this->foxDbConnection, $test);
+        $this->assertEquals(3, $test->getId());
+        $this->assertEquals(3, $test->getTestingJoinedOneToOne()->id);
+        $this->assertCount(2, $test->getTestingJoinedOneToOne()->testingSecondJoinedEntities);
+        $this->assertEquals(2,$test->getTestingJoinedOneToOne()->testingSecondJoinedEntities[0]->id);
+        $this->assertEquals(3,$test->getTestingJoinedOneToOne()->testingSecondJoinedEntities[1]->id);
+    }
+
 }

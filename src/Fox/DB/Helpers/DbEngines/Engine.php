@@ -28,12 +28,14 @@ namespace Fox\DB\Helpers\DbEngines;
 
 
 use Fox\Core\Helpers\RequestBody;
+use Fox\DB\Attribute\AutoIncrement;
 use Fox\DB\Attribute\Column;
 use Fox\DB\Attribute\Lazy;
 use Fox\DB\Attribute\OneToMany;
 use Fox\DB\Attribute\OneToOne;
 use Fox\DB\Attribute\PrimaryKey;
 use Fox\DB\Attribute\Table;
+use Fox\DB\Helpers\DbValueException;
 use Fox\DB\Helpers\FoxEntity;
 use Fox\DB\Helpers\IncorrectMappingException;
 use Fox\DB\Helpers\Predicate;
@@ -43,6 +45,8 @@ use JetBrains\PhpStorm\ArrayShape;
 use PDO;
 use PDOStatement;
 use ReflectionClass;
+use ReflectionMethod;
+use function Webmozart\Assert\Tests\StaticAnalysis\contains;
 
 abstract class Engine implements DbEngine
 {
@@ -102,73 +106,13 @@ abstract class Engine implements DbEngine
         return null;
     }
 
-    private function getParentEntity(FoxEntity $row, string $parentClass): ?FoxEntity
-    {
-        $reflectionEntity = new ReflectionClass($row);
-        foreach ($reflectionEntity->getProperties() as $property) {
-            if ($property->getType()->getName() === $parentClass) {
-                if (!$property->isPublic()) {
-                    $property->setAccessible(true);
-                }
-                return $property->getValue($row);
-            }
-
-            if (str_contains($property->getType()->getName(), 'Entity')) {
-                if (!$property->isPublic()) {
-                    $property->setAccessible(true);
-                }
-                $parentEntity = $this->getParentEntity($property->getValue($row), $parentClass);
-                if ($parentEntity instanceof $parentClass) {
-                    return $parentEntity;
-                }
-            }
-        }
-        return null;
-    }
-
-    private function getParentFromJoinResult(FoxEntity $row, string $parentClass): string
-    {
-        $reflection = new ReflectionClass($row);
-        foreach ($reflection->getProperties() as $reflectionProperty) {
-            if ($reflectionProperty->getType()->getName() === $parentClass) {
-                return $reflectionProperty->getName();
-            }
-        }
-
-        throw new IncorrectMappingException("Unknown property for parent $parentClass");
-    }
-
-    private function fillParentFromResult(FoxEntity $row, array &$parent, ?FoxEntity $parentEntity = null): void
-    {
-        $reflectionEntity = new ReflectionClass($row);
-        foreach ($reflectionEntity->getProperties() as $property) {
-            foreach ($parent as $entityName => $parentData) {
-                foreach ($parentData as $propertyName => $propertyType) {
-                    if ($property->getType()->getName() === $entityName) {
-                        if (!$property->isPublic()) {
-                            $property->setAccessible(true);
-                        }
-                        $this->fillParentFromResult($property->getValue($row), $parent, $row);
-                    }
-                    if ($row instanceof $entityName && $property->getName() === $propertyName && $parentEntity instanceof $propertyType) {
-                        if (!$property->isPublic()) {
-                            $property->setAccessible(true);
-                        }
-                        $property->setValue($row, $parentEntity);
-                        unset($parent[$entityName][$propertyName]);
-                    }
-                }
-            }
-        }
-    }
-
     protected function createSelectFromEntity(string $entityName, int $index = 0, ?string $joinType = null, ?string $joinedEntity = null): array
     {
         /** @var ReflectionClass $reflectionClass */
         [$tableName, $reflectionClass] = $this->createReflection($entityName);
         $alias = substr($tableName, 0, 1) . $index;
         $columns[$entityName] = $this->getColumnsWithAliases($alias, $this->getColumns($reflectionClass));
-        $primaryKey = self::getPrimaryKey($reflectionClass);
+        $primaryKey = self::getPrimaryKey($reflectionClass)[0];
         $eagerJoins = $this->getEagerJoins($reflectionClass, $primaryKey);
         $joinTables = [];
         $parent = [];
@@ -210,7 +154,7 @@ abstract class Engine implements DbEngine
         }, $columns);
     }
 
-    protected function getColumns(ReflectionClass $reflectionClass): array
+    protected function getColumns(ReflectionClass $reflectionClass, bool $includeFK = false): array
     {
         $res = [];
         foreach ($reflectionClass->getProperties() as $property) {
@@ -222,7 +166,7 @@ abstract class Engine implements DbEngine
             $oneToOne = $property->getAttributes(OneToOne::class);
             $oneToMany = $property->getAttributes(OneToMany::class);
 
-            if (!empty($oneToOne) || !empty($oneToMany)) {
+            if (!$includeFK && (!empty($oneToOne) || !empty($oneToMany))) {
                 continue;
             }
 
@@ -231,6 +175,39 @@ abstract class Engine implements DbEngine
             $res[$property->getName()] = $column->name ?? StringUtils::toSnakeCase($property->getName());
         }
         return $res;
+    }
+
+    protected function getChildren(ReflectionClass $reflectionClass): array
+    {
+        $res = [];
+        foreach ($reflectionClass->getProperties() as $property) {
+            $columnAttributes = $property->getAttributes(Column::class);
+            if (!empty($columnAttributes)) {
+                continue;
+            }
+
+            $oneToOne = $property->getAttributes(OneToOne::class);
+            $oneToMany = $property->getAttributes(OneToMany::class);
+
+            if (!empty($oneToOne) || !empty($oneToMany)) {
+                $res[] = $property->getName();
+            }
+        }
+        return $res;
+    }
+
+    public static function getPrimaryKey(ReflectionClass $reflectionClass): array
+    {
+        foreach ($reflectionClass->getProperties() as $property) {
+            $primaryKeyAttribute = $property->getAttributes(PrimaryKey::class);
+            if (empty($primaryKeyAttribute)) {
+                continue;
+            }
+            $autoIncrementAttributes = $property->getAttributes(AutoIncrement::class);
+
+            return [$property->getName(), !empty($autoIncrementAttributes)];
+        }
+        throw new IncorrectMappingException("Missing primary key for $reflectionClass->name");
     }
 
     #[ArrayShape([self::ONE_TO_ONE => "array", self::ONE_TO_MANY => "array"])]
@@ -270,19 +247,6 @@ abstract class Engine implements DbEngine
         return $res;
     }
 
-    public static function getPrimaryKey(ReflectionClass $reflectionClass): string
-    {
-        foreach ($reflectionClass->getProperties() as $property) {
-            $columnAttributes = $property->getAttributes(PrimaryKey::class);
-            if (empty($columnAttributes)) {
-                continue;
-            }
-
-            return $property->getName();
-        }
-        throw new IncorrectMappingException("Missing primary key for $reflectionClass->name");
-    }
-
     protected function generateSelectClause(array $columns): string
     {
         $select = 'SELECT ';
@@ -319,20 +283,6 @@ abstract class Engine implements DbEngine
         return $stmt;
     }
 
-    protected function generateLimitClause(?int $limit, ?int $offset): string
-    {
-        $limitClause = '';
-        if ($limit !== null) {
-            $limitClause = "LIMIT $limit";
-        }
-
-        if ($offset !== null) {
-            $limitClause .= " OFFSET $offset";
-        }
-
-        return $limitClause;
-    }
-
     protected function generateFromClause(string $tableName, $alias): string
     {
         return "FROM `$tableName` AS `$alias`";
@@ -353,6 +303,20 @@ abstract class Engine implements DbEngine
         }
 
         return $ret;
+    }
+
+    protected function generateLimitClause(?int $limit, ?int $offset): string
+    {
+        $limitClause = '';
+        if ($limit !== null) {
+            $limitClause = "LIMIT $limit";
+        }
+
+        if ($offset !== null) {
+            $limitClause .= " OFFSET $offset";
+        }
+
+        return $limitClause;
     }
 
     protected function generateWhereClause(array $columns, array $predicates, string $alias): array
@@ -452,6 +416,113 @@ abstract class Engine implements DbEngine
         return [$mappedResult[$mainEntityName], $mappedResult];
     }
 
+    private function fillParentFromResult(FoxEntity $row, array &$parent, ?FoxEntity $parentEntity = null): void
+    {
+        $reflectionEntity = new ReflectionClass($row);
+        foreach ($reflectionEntity->getProperties() as $property) {
+            foreach ($parent as $entityName => $parentData) {
+                foreach ($parentData as $propertyName => $propertyType) {
+                    if ($property->getType()->getName() === $entityName) {
+                        if (!$property->isPublic()) {
+                            $property->setAccessible(true);
+                        }
+                        $this->fillParentFromResult($property->getValue($row), $parent, $row);
+                    }
+                    if ($row instanceof $entityName && $property->getName() === $propertyName && $parentEntity instanceof $propertyType) {
+                        if (!$property->isPublic()) {
+                            $property->setAccessible(true);
+                        }
+                        $property->setValue($row, $parentEntity);
+                        unset($parent[$entityName][$propertyName]);
+                    }
+                }
+            }
+        }
+    }
+
+    private function getParentFromJoinResult(FoxEntity $row, string $parentClass): string
+    {
+        $reflection = new ReflectionClass($row);
+        foreach ($reflection->getProperties() as $reflectionProperty) {
+            if ($reflectionProperty->getType()->getName() === $parentClass) {
+                return $reflectionProperty->getName();
+            }
+        }
+
+        throw new IncorrectMappingException("Unknown property for parent $parentClass");
+    }
+
+    private function getParentEntity(FoxEntity $row, string $parentClass): ?FoxEntity
+    {
+        $reflectionEntity = new ReflectionClass($row);
+        foreach ($reflectionEntity->getProperties() as $property) {
+            if ($property->getType()->getName() === $parentClass) {
+                if (!$property->isPublic()) {
+                    $property->setAccessible(true);
+                }
+                return $property->getValue($row);
+            }
+
+            if (str_contains($property->getType()->getName(), 'Entity')) {
+                if (!$property->isPublic()) {
+                    $property->setAccessible(true);
+                }
+                $parentEntity = $this->getParentEntity($property->getValue($row), $parentClass);
+                if ($parentEntity instanceof $parentClass) {
+                    return $parentEntity;
+                }
+            }
+        }
+        return null;
+    }
+
+    protected function generateInsertClause(string $tableName, array $columns): string
+    {
+        $questionMarks = [];
+        $columns = array_map(function ($v) use (&$questionMarks) {
+            $questionMarks[] = '?';
+            return "`$v`";
+        }, $columns);
+
+        $columnsString = implode(',', $columns);
+        $qmString = implode(',', $questionMarks);
+        return "INSERT INTO `$tableName` ($columnsString) VALUES ($qmString)";
+    }
+
+    protected function getQuestionMarks(ReflectionClass $reflectionClass, FoxEntity $entity, array $columns): array
+    {
+        $questionMarks = [];
+        $getters = $this->getGetters($reflectionClass);
+
+        foreach ($columns as $var => $column) {
+            $lowerVar = strtolower($var);
+            if (array_key_exists($lowerVar, $getters)) {
+                $val = call_user_func([$entity, $getters[$lowerVar]]);
+            } else if ($reflectionClass->getProperty($var)->isPublic()) {
+                $val = $entity->{$var};
+            } else {
+                $clName = $entity::class;
+                throw new IncorrectMappingException("Entity $clName has not public access or getter to variable $var");
+            }
+
+            if ($val instanceof FoxEntity) {
+                $rfPk = new ReflectionClass($val);
+                [$pk, $ai] = self::getPrimaryKey($rfPk);
+                $pkProp = $rfPk->getProperty($pk);
+                $pkProp->setAccessible(true);
+                $val = $pkProp->getValue($val);
+                if (empty($val)) {
+                    $cls = $entity::class;
+                    throw new DbValueException("Can not get parent id for $cls. Property $var -> $pkProp");
+                }
+            }
+
+            $questionMarks[$var] = $val;
+        }
+
+        return $questionMarks;
+    }
+
     public function count(FoxDbConnection $foxDbConnection, string $entityName, array $predicates): int
     {
         [[$tableName, $alias], $columns, $joinTables, $eagerJoinManyToOne] = $this->createSelectFromEntity($entityName);
@@ -459,4 +530,71 @@ abstract class Engine implements DbEngine
         $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause, null, null);
         return $stmt->fetch(PDO::FETCH_COLUMN);
     }
+
+    public function insert(FoxDbConnection $foxDbConnection, FoxEntity $entity): void
+    {
+        /** @var ReflectionClass $reflectionClass */
+        [$tableName, $reflectionClass] = $this->createReflection($entity::class);
+        $columns = $this->getColumns($reflectionClass, true);
+        [$primaryKey, $autoIncrement] = self::getPrimaryKey($reflectionClass);
+        if ($autoIncrement) {
+            unset($columns[$primaryKey]);
+        }
+        $insertClause = $this->generateInsertClause($tableName, $columns);
+        $stmt = $foxDbConnection->getPdoConnection()->prepare($insertClause);
+        $questionMarks = $this->getQuestionMarks($reflectionClass, $entity, $columns);
+        $stmt->execute(array_values($questionMarks));
+        $id = $autoIncrement ? $foxDbConnection->getPdoConnection()->lastInsertId() : $questionMarks[$primaryKey];
+        $propertyPk = $reflectionClass->getProperty($primaryKey);
+        $propertyPk->setAccessible(true);
+        $propertyPk->setValue($entity, $id);
+        $children = $this->getChildren($reflectionClass);
+        $getters = $this->getGetters($reflectionClass);
+        foreach ($children as $child) {
+            $lowerVar = strtolower($child);
+            if (array_key_exists($lowerVar, $getters)) {
+                $foxEntity = call_user_func([$entity, $getters[$lowerVar]]);
+            } else if ($reflectionClass->getProperty($child)->isPublic()) {
+                $foxEntity = $entity->{$child};
+            } else {
+                $cls = $entity::class;
+                throw new IncorrectMappingException("Class $cls has not publicly accessible getter for field $child");
+            }
+
+            if (is_array($foxEntity)) {
+                foreach ($foxEntity as $item) {
+                    $this->insert($foxDbConnection, $item);
+                }
+                continue;
+            }
+
+            if ($foxEntity instanceof FoxEntity) {
+                $this->insert($foxDbConnection, $foxEntity);
+            }
+        }
+    }
+
+
+    public function update(FoxDbConnection $foxDbConnection, FoxEntity $entity)
+    {
+    }
+
+    public function delete(FoxDbConnection $foxDbConnection, FoxEntity $entity)
+    {
+    }
+
+
+    protected function getGetters(ReflectionClass $reflectionClass): array
+    {
+        $getters = [];
+        foreach ($reflectionClass->getMethods(ReflectionMethod::IS_PUBLIC) as $reflectionMethod) {
+            if (str_starts_with($reflectionMethod->getName(), 'get')) {
+                $lowerVar = strtolower(str_replace('get', '', $reflectionMethod->getName()));
+                $getters[$lowerVar] = $reflectionMethod->getName();
+            }
+        }
+        return $getters;
+    }
+
+
 }

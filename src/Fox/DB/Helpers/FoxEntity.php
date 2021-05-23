@@ -62,7 +62,7 @@ abstract class FoxEntity
             $dbConnection = $container->get(FoxDbConnection::class);
             $dbEngine = $dbConnection->getDbEngine();
             $reflection = new ReflectionClass($this);
-            $primaryKey = Engine::getPrimaryKey($reflection);
+            $primaryKey = Engine::getPrimaryKey($reflection)[0];
             $property = $reflection->getProperty($name);
             $targetReflection = new ReflectionClass($property->getType()->getName());
             $targetProperty = null;

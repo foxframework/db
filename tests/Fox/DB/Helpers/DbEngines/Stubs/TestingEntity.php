@@ -54,7 +54,7 @@ class TestingEntity extends FoxEntity
 
     #[OneToOne('testing_entity_id')]
     #[Lazy]
-    protected TestingLazyJoinedEntity $testingLazyJoinedEntity;
+    protected ?TestingLazyJoinedEntity $testingLazyJoinedEntity;
 
 
     public function getId(): int
@@ -99,15 +99,17 @@ class TestingEntity extends FoxEntity
     {
         $this->changeValue('testingJoinedOneToOne', $testingJoinedOneToOne);
         $this->testingJoinedOneToOne = $testingJoinedOneToOne;
+        $testingJoinedOneToOne->testingEntity = $this;
     }
 
-    public function getTestingLazyJoinedEntity(): TestingLazyJoinedEntity
+    public function getTestingLazyJoinedEntity(): ?TestingLazyJoinedEntity
     {
         return $this->getLazy('testingLazyJoinedEntity');
     }
 
-    public function setTestingLazyJoinedEntity(TestingLazyJoinedEntity $testingLazyJoinedEntity): void
+    public function setTestingLazyJoinedEntity(?TestingLazyJoinedEntity $testingLazyJoinedEntity): void
     {
         $this->changeValue('testingLazyJoinedEntity', $testingLazyJoinedEntity);
-        $this->testingLazyJoinedEntity = $testingLazyJoinedEntity;    }
+        $this->testingLazyJoinedEntity = $testingLazyJoinedEntity;
+    }
 }

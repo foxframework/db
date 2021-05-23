@@ -49,7 +49,7 @@ class TestingJoinedEntity extends FoxEntity
     public TestingEntity $testingEntity;
 
     #[OneToMany(TestingSecondJoinedEntity::class, 'testing_joined_entity_id')]
-    public ?array $testingSecondJoinedEntities;
+    public ?array $testingSecondJoinedEntities = null;
 
     #[Column]
     public ?string $someColumn;

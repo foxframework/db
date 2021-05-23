@@ -24,22 +24,12 @@
  *
  */
 
-namespace Fox\DB\Helpers\DbEngines;
+namespace Fox\DB\Helpers;
 
-use Fox\DB\Helpers\FoxEntity;
-use Fox\DB\Sources\Services\FoxDbConnection;
 
-interface DbEngine
+use Fox\Core\FoxException;
+
+class DbValueException extends FoxException
 {
-    function select(FoxDbConnection $foxDbConnection, string $entityName, ?int $limit, ?int $offset, ?string $limitedJoin, array $predicates): ?array;
 
-    function count(FoxDbConnection $foxDbConnection, string $entityName, array $predicates): int;
-
-    function insert(FoxDbConnection $foxDbConnection, FoxEntity $entity);
-
-    function update(FoxDbConnection $foxDbConnection, FoxEntity $entity);
-
-    function delete(FoxDbConnection $foxDbConnection, FoxEntity $entity);
-
-    function handles(): string;
 }
