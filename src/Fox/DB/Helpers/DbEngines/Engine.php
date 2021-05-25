@@ -91,13 +91,16 @@ abstract class Engine implements DbEngine
 
                         $property->setValue($result, $parentEntity);
                     }
-                    $parentReflection = new ReflectionClass($parentEntity);
-                    $parentReflectionProperty = $parentReflection->getProperty($propertyName);
-                    if ($parentReflectionProperty->isPublic()) {
-                        $parentReflectionProperty->setAccessible(true);
-                    }
 
-                    $parentReflectionProperty->setValue($parentEntity, $joinResult);
+                    if (!empty($parentEntity)) {
+                        $parentReflection = new ReflectionClass($parentEntity);
+                        $parentReflectionProperty = $parentReflection->getProperty($propertyName);
+                        if ($parentReflectionProperty->isPublic()) {
+                            $parentReflectionProperty->setAccessible(true);
+                        }
+
+                        $parentReflectionProperty->setValue($parentEntity, $joinResult);
+                    }
                 }
             }
             return $res;
@@ -489,6 +492,11 @@ abstract class Engine implements DbEngine
         return "INSERT INTO `$tableName` ($columnsString) VALUES ($qmString)";
     }
 
+    protected function generateDeleteClause(string $tableName, string $primaryKey)
+    {
+        return "DELETE FROM `$tableName` WHERE `$primaryKey` = ?";
+    }
+
     protected function getQuestionMarks(ReflectionClass $reflectionClass, FoxEntity $entity, array $columns): array
     {
         $questionMarks = [];
@@ -572,6 +580,8 @@ abstract class Engine implements DbEngine
                 $this->insert($foxDbConnection, $foxEntity);
             }
         }
+
+        $entity->setAsNotVirgin();
     }
 
 
@@ -581,6 +591,16 @@ abstract class Engine implements DbEngine
 
     public function delete(FoxDbConnection $foxDbConnection, FoxEntity $entity)
     {
+        /** @var ReflectionClass $reflectionClass */
+        [$tableName, $reflectionClass] = $this->createReflection($entity::class);
+        [$primaryKey, $autoIncrement] = self::getPrimaryKey($reflectionClass);
+        $columns = $this->getColumns($reflectionClass);
+        $deleteClause = $this->generateDeleteClause($tableName, $columns[$primaryKey]);
+        $propertyPk = $reflectionClass->getProperty($primaryKey);
+        $propertyPk->setAccessible(true);
+        $stmt = $foxDbConnection->getPdoConnection()->prepare($deleteClause);
+        $stmt->execute([$propertyPk->getValue($entity)]);
+        unset($entity);
     }
 
 

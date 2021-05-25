@@ -198,4 +198,17 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $this->assertEquals(3,$test->getTestingJoinedOneToOne()->testingSecondJoinedEntities[1]->id);
     }
 
+    public function testDelete()
+    {
+        $engine = new MySQLDbEngine();
+        $predicate = (new Predicate())
+            ->add(TestingJoinedEntity::class, 'id', 2);
+        $result = $engine->select($this->foxDbConnection, TestingJoinedEntity::class, 1, 0, null, [$predicate]);
+        $this->assertTrue($result[0] instanceof TestingJoinedEntity);
+        $engine->delete($this->foxDbConnection, $result[0]);
+        $result2 = $engine->select($this->foxDbConnection, TestingJoinedEntity::class, 1, 0, null, [$predicate]);
+        $this->assertEmpty($result2);
+        $this->assertEquals('DELETE FROM `testing_joined` WHERE `id` = ?', $this->testingPDO->queries[2][0]);
+    }
+
 }

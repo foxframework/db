@@ -41,16 +41,31 @@ class FoxEntityRepository
 
     public function fetch(string $entityName, Predicate...$predicates): ?FoxEntity
     {
-        $statement = $this->foxDbConnection->getDbEngine()->select($this->foxDbConnection, $entityName, 1, 0, null, $predicates);
+        $res = $this->foxDbConnection->getDbEngine()->select($this->foxDbConnection, $entityName, 1, 0, null, $predicates);
+
+        if (empty($res)) {
+            return null;
+        }
+
+        return $res[0];
     }
 
     public function fetchAll(string $entityName, Predicate...$predicates): ?array
     {
-        $statement = $this->foxDbConnection->getDbEngine()->select($this->foxDbConnection, $entityName, 1, 0, null, $predicates);
+        return $this->foxDbConnection->getDbEngine()->select($this->foxDbConnection, $entityName, 1, 0, null, $predicates);
     }
 
     public function saveOrUpdate(FoxEntity $entity): void
     {
+        if ($entity->isVirgin()) {
+            $this->foxDbConnection->getDbEngine()->insert($this->foxDbConnection, $entity);
+        } else {
+            $this->foxDbConnection->getDbEngine()->update($this->foxDbConnection, $entity);
+        }
+    }
 
+    public function delete(FoxEntity $entity): void
+    {
+        $this->foxDbConnection->getDbEngine()->delete($this->foxDbConnection, $entity);
     }
 }
