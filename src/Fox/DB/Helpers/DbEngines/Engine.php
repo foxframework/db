@@ -47,6 +47,7 @@ use PDOStatement;
 use ReflectionClass;
 use ReflectionMethod;
 use function Webmozart\Assert\Tests\StaticAnalysis\contains;
+use function Webmozart\Assert\Tests\StaticAnalysis\true;
 
 abstract class Engine implements DbEngine
 {
@@ -539,7 +540,7 @@ abstract class Engine implements DbEngine
         return $stmt->fetch(PDO::FETCH_COLUMN);
     }
 
-    public function insert(FoxDbConnection $foxDbConnection, FoxEntity $entity): void
+    public function insert(FoxDbConnection $foxDbConnection, FoxEntity $entity, bool $parent = true): void
     {
         /** @var ReflectionClass $reflectionClass */
         [$tableName, $reflectionClass] = $this->createReflection($entity::class);
@@ -549,6 +550,9 @@ abstract class Engine implements DbEngine
             unset($columns[$primaryKey]);
         }
         $insertClause = $this->generateInsertClause($tableName, $columns);
+        if ($parent) {
+            $foxDbConnection->getPdoConnection()->beginTransaction();
+        }
         $stmt = $foxDbConnection->getPdoConnection()->prepare($insertClause);
         $questionMarks = $this->getQuestionMarks($reflectionClass, $entity, $columns);
         $stmt->execute(array_values($questionMarks));
@@ -571,22 +575,93 @@ abstract class Engine implements DbEngine
 
             if (is_array($foxEntity)) {
                 foreach ($foxEntity as $item) {
-                    $this->insert($foxDbConnection, $item);
+                    $this->insert($foxDbConnection, $item, false);
                 }
                 continue;
             }
 
             if ($foxEntity instanceof FoxEntity) {
-                $this->insert($foxDbConnection, $foxEntity);
+                $this->insert($foxDbConnection, $foxEntity, false);
             }
         }
 
         $entity->setAsNotVirgin();
+        if ($parent) {
+            $foxDbConnection->getPdoConnection()->commit();
+        }
+    }
+
+    protected function generateUpdateClause(string $tableName, array $updatedColumns, string $primaryKeyColumn): string
+    {
+        $updateClause = "UPDATE `$tableName` SET ";
+        $first = true;
+        foreach ($updatedColumns as $column) {
+            if (!$first) {
+                $updateClause .= ',';
+            } else {
+                $first = false;
+            }
+            $updateClause .= "`$column` = ?";
+        }
+
+        $updateClause .= " WHERE `$primaryKeyColumn` = ?";
+
+        return $updateClause;
     }
 
 
-    public function update(FoxDbConnection $foxDbConnection, FoxEntity $entity)
+    public function update(FoxDbConnection $foxDbConnection, FoxEntity $entity, bool $parent = true)
     {
+        /** @var ReflectionClass $reflectionClass */
+        [$tableName, $reflectionClass] = $this->createReflection($entity::class);
+        [$primaryKey, $autoIncrement] = self::getPrimaryKey($reflectionClass);
+        $children = $this->getChildren($reflectionClass);
+        if ($parent) {
+            $foxDbConnection->getPdoConnection()->beginTransaction();
+        }
+        foreach ($children as $child) {
+            $childProperty = $reflectionClass->getProperty($child);
+            $childProperty->setAccessible(true);
+            if (!$childProperty->isInitialized($entity)) { // Lazy loaded fields
+                continue;
+            }
+            $val = $childProperty->getValue($entity);
+            if ($val instanceof FoxEntity) {
+                $this->update($foxDbConnection, $val, false);
+            } else if (is_array($val)) {
+                foreach ($val as $childVal) {
+                    $this->update($foxDbConnection, $childVal, false);
+                }
+            }
+        }
+
+        $doUpdate = !$entity->canUseDiff() || ($entity->canUseDiff() && !empty($entity->getChangedFields()));
+        if ($doUpdate) {
+            $columns = $this->getColumns($reflectionClass);
+            $pkColumn = $columns[$primaryKey];
+            unset($columns[$primaryKey]); // Prevent unwanted breaking changes
+
+            if ($entity->canUseDiff()) {
+                $changedFields = $entity->getChangedFields();
+                $columns = array_filter($columns, function ($propertyName) use ($changedFields) {
+                    return in_array($propertyName, $changedFields);
+                }, ARRAY_FILTER_USE_KEY);
+
+            }
+
+            $updateClause = $this->generateUpdateClause($tableName, $columns, $pkColumn);
+            $propertyPk = $reflectionClass->getProperty($primaryKey);
+            $propertyPk->setAccessible(true);
+            $questionMarks = $this->getQuestionMarks($reflectionClass, $entity, $columns);
+            $questionMarks[] = $propertyPk->getValue($entity);
+
+            $stmt = $foxDbConnection->getPdoConnection()->prepare($updateClause);
+            $stmt->execute(array_values($questionMarks));
+        }
+
+        if ($parent) {
+            $foxDbConnection->getPdoConnection()->commit();
+        }
     }
 
     public function delete(FoxDbConnection $foxDbConnection, FoxEntity $entity)
@@ -598,8 +673,10 @@ abstract class Engine implements DbEngine
         $deleteClause = $this->generateDeleteClause($tableName, $columns[$primaryKey]);
         $propertyPk = $reflectionClass->getProperty($primaryKey);
         $propertyPk->setAccessible(true);
+        $foxDbConnection->getPdoConnection()->beginTransaction();
         $stmt = $foxDbConnection->getPdoConnection()->prepare($deleteClause);
         $stmt->execute([$propertyPk->getValue($entity)]);
+        $foxDbConnection->getPdoConnection()->commit();
         unset($entity);
     }
 

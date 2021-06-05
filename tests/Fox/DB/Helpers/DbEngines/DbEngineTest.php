@@ -211,4 +211,41 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $this->assertEquals('DELETE FROM `testing_joined` WHERE `id` = ?', $this->testingPDO->queries[2][0]);
     }
 
+    public function testUpdate()
+    {
+        $this->testingPDO->queries = [];
+        $engine = new MySQLDbEngine();
+        $container = new FakeContainer();
+        $this->foxDbConnection->method("getDbEngine")->willReturn($engine);
+
+        $container->set(FoxDbConnection::class, $this->foxDbConnection);
+        Globals::set('foxContainer', $container);
+        $engine = new MySQLDbEngine();
+        $predicate = (new Predicate())
+            ->add(TestingEntity::class, 'id', 1);
+
+        /** @var TestingEntity $result */
+        $result = $engine->select($this->foxDbConnection, TestingEntity::class, 1, 0, null, [$predicate])[0];
+        $this->assertTrue($result instanceof TestingEntity);
+        $result->setFirstColumn('some changed text');
+        $engine->update($this->foxDbConnection, $result);
+        /** @var TestingEntity $result */
+        $result = $engine->select($this->foxDbConnection, TestingEntity::class, 1, 0, null, [$predicate])[0];
+        $this->assertTrue($result instanceof TestingEntity);
+        $this->assertEquals('some changed text', $result->getFirstColumn());
+        $result->getTestingLazyJoinedEntity()->someLazyColumn = 'Lazy child changed';
+        $engine->update($this->foxDbConnection, $result);
+
+        /** @var TestingEntity $result */
+        $result = $engine->select($this->foxDbConnection, TestingEntity::class, 1, 0, null, [$predicate])[0];
+        $this->assertTrue($result instanceof TestingEntity);
+        $this->assertEquals('some changed text', $result->getFirstColumn());
+        $this->assertEquals('Lazy child changed', $result->getTestingLazyJoinedEntity()->someLazyColumn);
+
+        $this->assertEquals('UPDATE `testing_joined_second` SET `some_column` = ? WHERE `id` = ?', $this->testingPDO->queries[2][0]);
+        $this->assertEquals('UPDATE `testing_joined` SET `some_column` = ? WHERE `id` = ?', $this->testingPDO->queries[3][0]);
+        $this->assertEquals('UPDATE `testing` SET `first_column` = ? WHERE `id` = ?', $this->testingPDO->queries[4][0]);
+        $this->assertEquals('UPDATE `testing_lazy_joined` SET `some_lazy_column` = ? WHERE `id` = ?', $this->testingPDO->queries[10][0]);
+    }
+
 }

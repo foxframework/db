@@ -67,19 +67,19 @@ abstract class FoxEntity
             $targetReflection = new ReflectionClass($property->getType()->getName());
             $targetProperty = null;
             foreach ($targetReflection->getProperties() as $targetLoopProperty) {
-                if($targetLoopProperty->getType()->getName() === $this::class) {
+                if ($targetLoopProperty->getType()->getName() === $this::class) {
                     $targetProperty = $targetLoopProperty;
                     break;
                 }
             }
 
-            if (empty($targetProperty)){
+            if (empty($targetProperty)) {
                 throw new IncorrectMappingException('Target entity not found');
             }
 
             $joinColumnName = $targetProperty->getAttributes(Column::class)[0]->newInstance()->name;
 
-            $predicate = (new Predicate())->add($this::class, $joinColumnName, $this->{$primaryKey},  exactPredicate: true);
+            $predicate = (new Predicate())->add($this::class, $joinColumnName, $this->{$primaryKey}, exactPredicate: true);
             $type = $reflection->getProperty($name)->getType()->getName();
             $isArray = $type === 'array';
             $limit = $isArray ? null : 1;
@@ -116,7 +116,7 @@ abstract class FoxEntity
         }
 
         if (!str_starts_with($name, '_') && !in_array($name, $this->_lazyInitFields)) {
-            $this->_changedFields[] = $value;
+            $this->_changedFields[] = $name;
         }
 
         if (in_array($name, $this->_lazyInitFields) && !empty($value)) {
@@ -138,6 +138,16 @@ abstract class FoxEntity
     public function isVirgin(): bool
     {
         return $this->_virginEntity;
+    }
+
+    public function canUseDiff(): bool
+    {
+        return $this->_useDiff;
+    }
+
+    public function getChangedFields(): array
+    {
+        return $this->_changedFields;
     }
 
 }
