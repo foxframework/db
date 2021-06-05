@@ -3,7 +3,7 @@
     "description": "DB Layer for FoX Framework",
     "type": "library",
     "require": {
-        "foxframework/core": "dev-main",
+        "foxframework/core": "v0.1-alpha",
         "ext-pdo": "*"
     },
     "require-dev": {
@@ -15,6 +15,5 @@
             "name": "Petr Ploner",
             "email": "petr@ploner.cz"
         }
-    ],
-    "minimum-stability": "dev"
+    ]
 }
