@@ -3,7 +3,7 @@
     "description": "DB Layer for FoX Framework",
     "type": "library",
     "require": {
-        "foxframework/core": "v0.1-alpha",
+        "foxframework/core": "v0.1.1-alpha",
         "ext-pdo": "*"
     },
     "require-dev": {
