@@ -30,7 +30,7 @@ use Fox\Core\Attribute\Autowire;
 use Fox\Core\Attribute\Service;
 use Fox\Core\Config\AppConfiguration;
 use Fox\DB\Helpers\DbEngines\DbEngine;
-use Fox\Security\Config\FoxDbExtensionConfigInterface;
+use Fox\DB\Config\FoxDbExtensionConfigInterface;
 use PDO;
 
 #[Service]
@@ -47,7 +47,7 @@ class FoxDbConnection
     {
         /** @var FoxDbExtensionConfigInterface $config */
         $this->dsn = $config->foxDbGetPDODsn();
-        $this->engine = explode($this->dsn, ':')[0] ?? throw new InvalidDBConfigurationException();
+        $this->engine = explode(':', $this->dsn)[0] ?? throw new InvalidDBConfigurationException();
         $this->username = $config->foxDbUsername();
         $this->password = $config->foxDbPassword();
     }
