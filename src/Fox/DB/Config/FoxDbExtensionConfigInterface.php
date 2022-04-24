@@ -24,7 +24,7 @@
  *
  */
 
-namespace Fox\Security\Config;
+namespace Fox\DB\Config;
 
 interface FoxDbExtensionConfigInterface
 {
