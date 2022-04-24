@@ -15,5 +15,8 @@
             "name": "Petr Ploner",
             "email": "petr@ploner.cz"
         }
-    ]
+    ],
+    "autoload": {
+        "psr-4": {"Fox\\": "src/Fox/"}
+    }
 }
