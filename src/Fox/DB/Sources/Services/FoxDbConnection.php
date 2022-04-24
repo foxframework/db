@@ -41,7 +41,7 @@ class FoxDbConnection
     private string $username;
     private string $password;
     private string $engine;
-    private PDO $pdoConnection;
+    private ?PDO $pdoConnection = null;
 
     public function __construct(AppConfiguration $config, private FoxDBEngineResolver $foxDBEngineResolver)
     {
