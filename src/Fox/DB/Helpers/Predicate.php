@@ -38,6 +38,7 @@ class Predicate
     const BETWEEN_AND = 'BETWEEN AND';
     const IN = 'IN';
     const NOT_IN = 'NOT IN';
+    const IS = 'IS';
 
     const ALLOWED_OPERATIONS = [
         self::EQUALS,
@@ -48,7 +49,8 @@ class Predicate
         self::LESS_OR_EQUAL,
         self::BETWEEN_AND,
         self::IN,
-        self::NOT_IN
+        self::NOT_IN,
+        self::IS
     ];
 
     private array $predicates = [];

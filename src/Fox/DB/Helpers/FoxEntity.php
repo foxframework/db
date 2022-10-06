@@ -29,6 +29,8 @@ namespace Fox\DB\Helpers;
 use Fox\Core\Helpers\Globals;
 use Fox\DB\Attribute\Column;
 use Fox\DB\Attribute\Lazy;
+use Fox\DB\Attribute\OneToMany;
+use Fox\DB\Attribute\OneToOne;
 use Fox\DB\Helpers\DbEngines\Engine;
 use Fox\DB\Sources\Services\FoxDbConnection;
 use Psr\Container\ContainerInterface;
@@ -64,7 +66,25 @@ abstract class FoxEntity
             $reflection = new ReflectionClass($this);
             $primaryKey = Engine::getPrimaryKey($reflection)[0];
             $property = $reflection->getProperty($name);
-            $targetReflection = new ReflectionClass($property->getType()->getName());
+            $type = $property->getType()->getName();
+            $isArray = $type === 'array';
+            $targetEntity = $this::class;
+            if ($isArray) {
+                $attributes = $property->getAttributes();
+                /** @var \ReflectionAttribute $attribute */
+                foreach ($attributes as $attribute) {
+                    if ($attribute->getName() === OneToMany::class) {
+                        /** @var OneToMany $attrInstacne */
+                        $attrInstacne = $attribute->newInstance();
+                        $type = $attrInstacne->entityName;
+                        $targetEntity = $type;
+                    }
+                }
+                if ($type === 'array') {
+                    throw new IncorrectMappingException('Missing oneToMany attribute');
+                }
+            }
+            $targetReflection = new ReflectionClass($type);
             $targetProperty = null;
             foreach ($targetReflection->getProperties() as $targetLoopProperty) {
                 if ($targetLoopProperty->getType()->getName() === $this::class) {
@@ -78,12 +98,13 @@ abstract class FoxEntity
             }
 
             $joinColumnName = $targetProperty->getAttributes(Column::class)[0]->newInstance()->name;
-
-            $predicate = (new Predicate())->add($this::class, $joinColumnName, $this->{$primaryKey}, exactPredicate: true);
-            $type = $reflection->getProperty($name)->getType()->getName();
-            $isArray = $type === 'array';
+            if (empty($joinColumnName)) {
+                $joinColumnName = $targetProperty->getName();
+            }
+            $predicate = (new Predicate())->add($targetEntity, $joinColumnName, $this->{$primaryKey}, exactPredicate: true);
             $limit = $isArray ? null : 1;
             $offset = $isArray ? null : 0;
+
             $result = $dbEngine->select($dbConnection, $type, $limit, $offset, $this::class, [$predicate]);
             $parentPropertyName = null;
             foreach ($result as $res) {

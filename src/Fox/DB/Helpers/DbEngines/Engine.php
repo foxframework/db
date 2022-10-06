@@ -114,21 +114,32 @@ abstract class Engine implements DbEngine
     {
         /** @var ReflectionClass $reflectionClass */
         [$tableName, $reflectionClass] = $this->createReflection($entityName);
-        $alias = substr($tableName, 0, 1) . $index;
+        $alias = substr($tableName, 0, 3) . $index;
         $columns[$entityName] = $this->getColumnsWithAliases($alias, $this->getColumns($reflectionClass));
         $primaryKey = self::getPrimaryKey($reflectionClass)[0];
         $eagerJoins = $this->getEagerJoins($reflectionClass, $primaryKey);
         $joinTables = [];
         $parent = [];
+        $joiningColumn = $columns[$entityName][$primaryKey];
         foreach ($eagerJoins[Engine::ONE_TO_ONE] as $property => $joinColumnDefinition) {
             [$joinColumn, $cascade, $nullable] = $joinColumnDefinition;
-            $entityType = $reflectionClass->getProperty($property)->getType()->getName();
+            $reflectionProperty = $reflectionClass->getProperty($property);
+            $entityType = $reflectionProperty->getType()->getName();
             if ($entityType === $joinType || $entityType === $joinedEntity) {
                 $parent[$entityName][$property] = $entityType;
                 continue;
             }
+            foreach ($reflectionProperty->getAttributes() as $attribute) {
+                if ($attribute->getName() === Column::class) {
+                    $joiningColumn = $attribute->newInstance()->name;
+                    if (empty($joiningColumn)) {
+                        $joiningColumn = $reflectionProperty->getName();
+                    }
+                    $joiningColumn = "$alias.$joiningColumn";
+                }
+            }
             [[$joinTableName, $joinAlias], $joinColumns, $nestedJoinTables, $nestedEagerJoinsManyToOne, $nestedParent] = $this->createSelectFromEntity($entityType, $index + 1, $entityName);
-            $joinTables = array_merge([[$joinTableName, $joinAlias, $joinColumn, $nullable, $columns[$entityName][$primaryKey], $entityType]], $nestedJoinTables, $joinTables);
+            $joinTables = array_merge([[$joinTableName, $joinAlias, $joinColumn, $nullable, $joiningColumn, $entityType]], $nestedJoinTables, $joinTables);
             $columns = array_merge($columns, $joinColumns);
             $eagerJoins[Engine::ONE_TO_MANY] = array_merge($eagerJoins[Engine::ONE_TO_MANY], $nestedEagerJoinsManyToOne);
             $parent = array_merge($parent, $nestedParent);
@@ -360,15 +371,27 @@ abstract class Engine implements DbEngine
                     }
                     $bindPar .= ')';
                 } else {
-                    $bindPar = '?';
-                    $questionMarks[] = $value;
-                    $pIndex++;
+                    if ($operation === Predicate::BETWEEN_AND) {
+                        $questionMarks[] = $value[0];
+                        $questionMarks[] = $value[1];
+                        $pIndex += 2;
+                    } else {
+                        $bindPar = ' ?';
+                        $questionMarks[] = $value;
+                        $pIndex++;
+                    }
+
                 }
 
                 if ($exactPredicate) {
                     $clause .= "`$alias`.`$variable` $operation $bindPar";
                 } else {
-                    $clause .= explode(' as', $columns[$className][$variable])[0] . " $operation $bindPar";
+                    if ($operation === Predicate::BETWEEN_AND) {
+                        $clause .= explode(' as', $columns[$className][$variable])[0] . " BETWEEN ? AND ?";
+
+                    } else {
+                        $clause .= explode(' as', $columns[$className][$variable])[0] . " $operation $bindPar";
+                    }
                 }
             }
 
@@ -409,7 +432,7 @@ abstract class Engine implements DbEngine
                 foreach ($properties as $property) {
                     $type = $property->getType()->getName();
                     if ($type === $entityType) {
-                        $mappedResult[$entityName][$property->getName()] = &$mappedResult[$type];
+                        $mappedResult[$entityName][$property->getName()] = RequestBody::instanceDAOFromBody($entityType, $mappedResult[$type]);
                         unset($joinTables[$i]);
                     }
                 }
