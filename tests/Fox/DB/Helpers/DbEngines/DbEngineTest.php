@@ -161,6 +161,17 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $this->assertCount(1, $this->testingPDO->queries);
         $this->assertEquals('SELECT COUNT(*) FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) WHERE (`t0`.`first_column` = ?)', trim($this->testingPDO->queries[0][0]));
     }
+    public function testCountLike()
+    {
+        $this->testingPDO->queries = [];
+        $engine = new MySQLDbEngine();
+        $predicate = (new Predicate())
+            ->add(TestingEntity::class, 'firstColumn', 'test1%', Predicate::LIKE);
+        $result = $engine->count($this->foxDbConnection, TestingEntity::class, [$predicate]);
+        $this->assertEquals(1, $result);
+        $this->assertCount(1, $this->testingPDO->queries);
+        $this->assertEquals('SELECT COUNT(*) FROM `testing` AS `tes0` JOIN `testing_joined` AS `tes1` ON (`tes1`.`testing_entity_id` = `tes0`.`id`) WHERE (`tes0`.`first_column` LIKE  ?)', trim($this->testingPDO->queries[0][0]));
+    }
 
     public function testInsert()
     {
