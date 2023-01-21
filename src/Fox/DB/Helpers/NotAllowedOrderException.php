@@ -24,11 +24,12 @@
  *
  */
 
-namespace Fox\DB\Sources\Services;
+namespace Fox\DB\Helpers;
 
-use PHPUnit\Framework\TestCase;
 
-class SchemaGeneratorServiceTest extends TestCase
+use Fox\Core\FoxException;
+
+class NotAllowedOrderException extends FoxException
 {
 
 }

@@ -34,6 +34,7 @@ use Fox\DB\Attribute\OneToOne;
 use Fox\DB\Helpers\DbEngines\Engine;
 use Fox\DB\Sources\Services\FoxDbConnection;
 use Psr\Container\ContainerInterface;
+use ReflectionAttribute;
 use ReflectionClass;
 
 abstract class FoxEntity
@@ -71,7 +72,7 @@ abstract class FoxEntity
             $targetEntity = $this::class;
             if ($isArray) {
                 $attributes = $property->getAttributes();
-                /** @var \ReflectionAttribute $attribute */
+                /** @var ReflectionAttribute $attribute */
                 foreach ($attributes as $attribute) {
                     if ($attribute->getName() === OneToMany::class) {
                         /** @var OneToMany $attrInstacne */

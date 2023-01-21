@@ -38,6 +38,7 @@ use Fox\DB\Attribute\Table;
 use Fox\DB\Helpers\DbValueException;
 use Fox\DB\Helpers\FoxEntity;
 use Fox\DB\Helpers\IncorrectMappingException;
+use Fox\DB\Helpers\Order;
 use Fox\DB\Helpers\Predicate;
 use Fox\DB\Helpers\StringUtils;
 use Fox\DB\Sources\Services\FoxDbConnection;
@@ -54,14 +55,14 @@ abstract class Engine implements DbEngine
     protected const ONE_TO_ONE = 0;
     protected const ONE_TO_MANY = 2;
 
-    public function select(FoxDbConnection $foxDbConnection, string $entityName, ?int $limit, ?int $offset, ?string $limitedJoin, array $predicates): ?array
+    public function select(FoxDbConnection $foxDbConnection, string $entityName, ?int $limit, ?int $offset, ?string $limitedJoin, array $predicates, ?Order $order = null): ?array
     {
         [[$tableName, $alias], $columns, $joinTables, $eagerJoinManyToOne, $parent] = $this->createSelectFromEntity($entityName, joinedEntity: $limitedJoin);
         $selectClause = $this->generateSelectClause($columns);
-        $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause, $limit, $offset);
+        $stmt = $this->doSelect($tableName, $alias, $joinTables, $foxDbConnection, $columns, $predicates, $selectClause, $limit, $offset, $order);
         if ($stmt instanceof PDOStatement) {
             $res = $stmt->fetchAll();
-            foreach ($columns as $entity => &$aliases) {
+            foreach ($columns as &$aliases) {
                 $aliases = $this->getRealAliases($aliases);
             }
 
@@ -277,22 +278,25 @@ abstract class Engine implements DbEngine
         return $select;
     }
 
-    public function doSelect($tableName,
-                             $alias,
-                             mixed $joinTables,
+    public function doSelect(string          $tableName,
+                             string          $alias,
+                             mixed           $joinTables,
                              FoxDbConnection $foxDbConnection,
-                             mixed $columns,
-                             array $predicates,
-                             string $selectClause,
-                             ?int $limit,
-                             ?int $offset): bool|PDOStatement
+                             mixed           $columns,
+                             array           $predicates,
+                             string          $selectClause,
+                             ?int            $limit,
+                             ?int            $offset,
+                             ?Order          $order = null
+    ): bool|PDOStatement
     {
         $fromClause = $this->generateFromClause($tableName, $alias);
-        $joinClause = $this->generateJoinClauses($joinTables, $foxDbConnection);
+        $joinClause = $this->generateJoinClauses($joinTables);
         $limitClause = $this->generateLimitClause($limit, $offset);
         [$whereClause, $questionMarks] = $this->generateWhereClause($columns, $predicates, $alias);
+        $orderClause = $this->generateOrderClause($columns, $order);
         $join = implode(' ', $joinClause);
-        $query = "$selectClause $fromClause $join $whereClause $limitClause";
+        $query = "$selectClause $fromClause $join $whereClause $orderClause $limitClause";
         $stmt = $foxDbConnection->getPdoConnection()->prepare($query);
         $stmt->execute($questionMarks);
         return $stmt;
@@ -303,7 +307,7 @@ abstract class Engine implements DbEngine
         return "FROM `$tableName` AS `$alias`";
     }
 
-    protected function generateJoinClauses(array $joinTables, FoxDbConnection $foxDbConnection): array
+    protected function generateJoinClauses(array $joinTables): array
     {
         $ret = [];
         foreach ($joinTables as $joinTable) {
@@ -406,7 +410,27 @@ abstract class Engine implements DbEngine
         return [$clause, $questionMarks];
     }
 
-    protected function getRealAliases(array $columns)
+    protected function generateOrderClause(array $columns, ?Order $order): string
+    {
+        if ($order === null) {
+            return '';
+        }
+
+        $orderClause = 'ORDER BY ';
+        $firstRun = true;
+        foreach ($order->getOrderColumns() as $orderItem) {
+            [$className, $variable, $direction] = $orderItem;
+            if (!$firstRun) {
+                $orderClause .= ', ';
+            }
+            $orderClause .=  explode(' as', $columns[$className][$variable])[0] . " $direction";
+            $firstRun = false;
+        }
+
+        return $orderClause;
+    }
+
+    protected function getRealAliases(array $columns): array
     {
         return array_map(function ($v) {
             return explode('as ', $v)[1];

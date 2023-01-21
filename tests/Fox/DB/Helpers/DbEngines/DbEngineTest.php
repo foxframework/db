@@ -29,6 +29,7 @@ namespace Fox\DB\Helpers\DbEngines;
 use Fox\Core\DI\FoxContainer;
 use Fox\Core\Helpers\Globals;
 use Fox\DB\Helpers\IncorrectMappingException;
+use Fox\DB\Helpers\Order;
 use Fox\DB\Helpers\Predicate;
 use Fox\DB\Sources\Services\FoxDbConnection;
 use Fox\DB\Sources\Services\Stubs\FakeContainer;
@@ -125,18 +126,11 @@ class DbEngineTest extends TestCase
         $this->assertCount(2, $this->testingPDO->queries);
         $this->assertEquals(
             preg_replace('~[\r\n]+~', '',
-                '
-SELECT `t0`.`id` as `t0id`,`t0`.`first_column` as `t0first_column`,`t0`.`custom_second_column` as `t0custom_second_column`, `t1`.`id` as `t1id`,`t1`.`some_column` as `t1some_column` 
-FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) 
-WHERE (`t0`.`first_column` = ? AND `t1`.`some_column` NOT IN (?,?)) OR (`t1`.`some_column` = ?) 
-LIMIT 1 OFFSET 0'), $this->testingPDO->queries[0][0]);
+                'SELECT `tes0`.`id` as `tes0id`,`tes0`.`first_column` as `tes0first_column`,`tes0`.`custom_second_column` as `tes0custom_second_column`, `tes1`.`id` as `tes1id`,`tes1`.`some_column` as `tes1some_column` FROM `testing` AS `tes0` JOIN `testing_joined` AS `tes1` ON (`tes1`.`testing_entity_id` = `tes0`.`id`) WHERE (`tes0`.`first_column` =  ? AND `tes1`.`some_column` NOT IN (?,?)) OR (`tes1`.`some_column` =  ?)  LIMIT 1 OFFSET 0'), $this->testingPDO->queries[0][0]);
 
         $this->assertEquals(
             preg_replace('~[\r\n]+~', '',
-                '
-SELECT `t0`.`id` as `t0id`,`t0`.`some_column` as `t0some_column` 
-FROM `testing_joined_second` AS `t0`  
-WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]);
+                'SELECT `tes0`.`id` as `tes0id`,`tes0`.`some_column` as `tes0some_column` FROM `testing_joined_second` AS `tes0`  WHERE (`tes0`.`testing_joined_entity_id` =  ?)  '), $this->testingPDO->queries[1][0]);
 
         $container = new FakeContainer();
         $this->foxDbConnection->method("getDbEngine")->willReturn($engine);
@@ -147,7 +141,29 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $this->assertTrue($lazy instanceof TestingLazyJoinedEntity);
         $this->assertEquals('some lazy text', $lazy->someLazyColumn);
         $this->assertCount(3, $this->testingPDO->queries);
-        $this->assertEquals('SELECT `t0`.`id` as `t0id`,`t0`.`some_lazy_column` as `t0some_lazy_column` FROM `testing_lazy_joined` AS `t0`  WHERE (`t0`.`testing_entity_id` = ?) LIMIT 1 OFFSET 0', $this->testingPDO->queries[2][0]);
+        $this->assertEquals('SELECT `tes0`.`id` as `tes0id`,`tes0`.`some_lazy_column` as `tes0some_lazy_column` FROM `testing_lazy_joined` AS `tes0`  WHERE (`tes0`.`testing_entity_id` =  ?)  LIMIT 1 OFFSET 0', $this->testingPDO->queries[2][0]);
+    }
+
+    public function testCreateSelectWithOrder()
+    {
+        $engine = new MySQLDbEngine();
+        $predicate1 = (new Predicate())
+            ->add(TestingEntity::class, 'firstColumn', 'test')
+            ->add(TestingJoinedEntity::class, 'someColumn', ['1abcd', '2def'], Predicate::NOT_IN);
+        $predicate2 = (new Predicate())
+            ->add(TestingJoinedEntity::class, 'someColumn', 'test1234');
+        $order = new Order();
+        $order->add(TestingEntity::class, 'firstColumn', Order::DESC);
+        $result = $engine->select($this->foxDbConnection, TestingEntity::class, 1, 0, null, [$predicate1, $predicate2], $order);
+        $this->assertCount(1, $result);
+        $this->assertTrue($result[0] instanceof TestingEntity);
+        $this->assertTrue($result[0]->getTestingJoinedOneToOne() instanceof TestingJoinedEntity);
+        $this->assertCount(1, $result[0]->getTestingJoinedOneToOne()->testingSecondJoinedEntities);
+        $this->assertTrue($result[0]->getTestingJoinedOneToOne()->testingSecondJoinedEntities[0] instanceof TestingSecondJoinedEntity);
+        $this->assertCount(2, $this->testingPDO->queries);
+        $this->assertEquals(
+            preg_replace('~[\r\n]+~', '',
+                'SELECT `tes0`.`id` as `tes0id`,`tes0`.`first_column` as `tes0first_column`,`tes0`.`custom_second_column` as `tes0custom_second_column`, `tes1`.`id` as `tes1id`,`tes1`.`some_column` as `tes1some_column` FROM `testing` AS `tes0` JOIN `testing_joined` AS `tes1` ON (`tes1`.`testing_entity_id` = `tes0`.`id`) WHERE (`tes0`.`first_column` =  ? AND `tes1`.`some_column` NOT IN (?,?)) OR (`tes1`.`some_column` =  ?) ORDER BY `tes0`.`first_column` DESC LIMIT 1 OFFSET 0'), $this->testingPDO->queries[0][0]);
     }
 
     public function testCount()
@@ -159,7 +175,7 @@ WHERE (`t0`.`testing_joined_entity_id` = ?) '), $this->testingPDO->queries[1][0]
         $result = $engine->count($this->foxDbConnection, TestingEntity::class, [$predicate]);
         $this->assertEquals(1, $result);
         $this->assertCount(1, $this->testingPDO->queries);
-        $this->assertEquals('SELECT COUNT(*) FROM `testing` AS `t0` JOIN `testing_joined` AS `t1` ON (`t1`.`testing_entity_id` = `t0`.`id`) WHERE (`t0`.`first_column` = ?)', trim($this->testingPDO->queries[0][0]));
+        $this->assertEquals('SELECT COUNT(*) FROM `testing` AS `tes0` JOIN `testing_joined` AS `tes1` ON (`tes1`.`testing_entity_id` = `tes0`.`id`) WHERE (`tes0`.`first_column` =  ?)', trim($this->testingPDO->queries[0][0]));
     }
     public function testCountLike()
     {

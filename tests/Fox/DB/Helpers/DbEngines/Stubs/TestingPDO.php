@@ -27,7 +27,9 @@
 namespace Fox\DB\Sources\Services\Stubs;
 
 
-class TestingPDO extends \PDO
+use PDO;
+
+class TestingPDO extends PDO
 {
     public array $queries;
 

@@ -27,11 +27,12 @@
 namespace Fox\DB\Helpers\DbEngines;
 
 use Fox\DB\Helpers\FoxEntity;
+use Fox\DB\Helpers\Order;
 use Fox\DB\Sources\Services\FoxDbConnection;
 
 interface DbEngine
 {
-    function select(FoxDbConnection $foxDbConnection, string $entityName, ?int $limit, ?int $offset, ?string $limitedJoin, array $predicates): ?array;
+    function select(FoxDbConnection $foxDbConnection, string $entityName, ?int $limit, ?int $offset, ?string $limitedJoin, array $predicates, ?Order $order): ?array;
 
     function count(FoxDbConnection $foxDbConnection, string $entityName, array $predicates): int;
 
